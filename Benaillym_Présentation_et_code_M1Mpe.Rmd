@@ -1,0 +1,131 @@
+---
+title: "Analyse des tirages du Loto en France"
+author: "Mehdi Benailly M1_MPE"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Cette analyse vise à comprendre le fonctionnement des tirages du Loto en France depuis novembre 2019. Nous allons examiner les distributions des numéros tirés et du numéro chance, vérifier la régularité des tirages à l'aide d'un test Khi² et analyser la redistribution des gains aux joueurs.
+
+## Chargement des données
+
+```{r}
+# Chargement des bibliothèques nécessaires
+library(ggplot2)
+library(dplyr)
+library(stats)
+
+# Importation des données des tirages du Loto
+data <- read.csv("loto_201911.csv", sep=";", stringsAsFactors=FALSE)
+```
+
+## Ajout de nouveaux tirages (optionnel)
+
+L'utilisateur peut ajouter de nouveaux tirages qui seront validés avant leur intégration aux données existantes.
+
+```{r}
+# Vérification des règles du jeu
+verifier_tirage <- function(boules, numero_chance) {
+  if (length(unique(boules)) != 5) {
+    return("Erreur : Les boules doivent être uniques.")
+  }
+  if (any(boules < 1 | boules > 49)) {
+    return("Erreur : Les numéros des boules doivent être entre 1 et 49.")
+  }
+  if (numero_chance < 1 | numero_chance > 10) {
+    return("Erreur : Le numéro chance doit être entre 1 et 10.")
+  }
+  return("Tirage valide.")
+}
+
+# Ajout de tirage en option
+ajouter_tirage <- readline("Souhaitez-vous ajouter un nouveau tirage ? (oui/non) : ")
+
+if (tolower(ajouter_tirage) == "oui") {
+  nouveau_tirage <- data.frame(
+    boule_1 = as.integer(readline("Entrez la première boule : ")),
+    boule_2 = as.integer(readline("Entrez la deuxième boule : ")),
+    boule_3 = as.integer(readline("Entrez la troisième boule : ")),
+    boule_4 = as.integer(readline("Entrez la quatrième boule : ")),
+    boule_5 = as.integer(readline("Entrez la cinquième boule : ")),
+    numero_chance = as.integer(readline("Entrez le numéro chance : "))
+  )
+  
+  # Validation et ajout du tirage
+  validation <- verifier_tirage(nouveau_tirage[1:5], nouveau_tirage$numero_chance)
+  cat(validation, "\n")
+  
+  if (validation == "Tirage valide.") {
+    data <- rbind(data, nouveau_tirage)
+    write.csv(data, "loto_201911.csv", row.names = FALSE, sep=";")
+    cat("Nouveau tirage ajouté avec succès !\n")
+  }
+}
+```
+
+## Vérification de l'équité des tirages avec un test Khi²
+
+Nous analysons ici si les numéros du Loto sont répartis de manière aléatoire ou s'il y a une irrégularité statistique.
+
+```{r}
+# Analyse de la distribution des boules
+boules <- c(data$boule_1, data$boule_2, data$boule_3, data$boule_4, data$boule_5)
+boules_df <- as.data.frame(table(boules))
+colnames(boules_df) <- c("Numéro", "Fréquence")
+
+# Exécution du test Khi²
+expected <- rep(sum(boules_df$Fréquence) / nrow(boules_df), nrow(boules_df))
+khi2_boules <- chisq.test(boules_df$Fréquence, p = rep(1/nrow(boules_df), nrow(boules_df)))
+print(khi2_boules)
+
+# Comparaison avec la valeur critique
+alpha <- 0.05
+df_boules <- length(boules_df$Numéro) - 1
+valeur_critique_boules <- qchisq(1 - alpha, df_boules)
+cat("Valeur critique pour les numéros tirés :", valeur_critique_boules, "\n")
+
+# Interprétation des résultats
+if (khi2_boules$statistic > valeur_critique_boules) {
+  cat("\nRésultat : La distribution des numéros semble anormale. Une enquête plus approfondie est recommandée.\n")
+} else {
+  cat("\nRésultat : Aucune anomalie détectée, la loterie semble équitable.\n")
+}
+```
+
+## Analyse financière du Loto
+
+Nous allons maintenant étudier la redistribution financière du Loto en France.
+
+```{r}
+# Calcul des participations, mises et redistribution des gains
+colonnes_gagnants <- grep("nombre_de_gagnant_au_rang", names(data), value = TRUE)
+colonnes_rapports <- grep("rapport_du_rang", names(data), value = TRUE)
+
+total_participants <- sum(rowSums(data[, colonnes_gagnants], na.rm = TRUE))
+montant_total_mise <- total_participants * 2.20
+
+distribution_gains <- sum(as.numeric(unlist(data[, colonnes_gagnants])) * as.numeric(unlist(data[, colonnes_rapports])), na.rm = TRUE)
+
+taux_retour <- (distribution_gains / montant_total_mise) * 100
+
+cat("Nombre total de participations :", total_participants, "\n")
+cat("Montant total misé :", montant_total_mise, "€\n")
+cat("Montant total redistribué :", distribution_gains, "€\n")
+cat("Taux de retour aux joueurs :", taux_retour, "%\n")
+
+# Vérification de la conformité avec la législation
+if (taux_retour >= 50) {
+  cat("\nLe Loto respecte la législation française avec un taux de retour supérieur ou égal à 50%.\n")
+} else {
+  cat("\nAttention : Le taux de retour est inférieur à 50%, ce qui ne respecte pas la législation française.\n")
+}
+```
+
+### Conclusion
+
+Cette analyse nous permet d'évaluer la régularité des tirages ainsi que la redistribution financière du Loto en France. Grâce aux tests statistiques et aux calculs de mises et de redistribution, nous avons pu vérifier si le Loto respecte les réglementations en vigueur. Cette présentation peut servir de support pour approfondir l'analyse et mener des études plus poussées sur la loterie en France.
